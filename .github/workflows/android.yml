@@ -1,44 +1,56 @@
-
 name: Build Velmora APK
 
 on:
-  workflow_dispatch:
-  push:
-    paths:
-      - '**.zip'
-      - '.github/workflows/android.yml'
+workflow_dispatch:
+push:
+paths:
+- '*.zip'
+- '.github/workflows/android.yml'
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+steps:
+  - name: Checkout
+    uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+  - name: Setup Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: '17'
 
-      - name: Extract Android project
-        run: |
-          mkdir extracted
-          unzip -o ./*.zip -d extracted
-          find extracted -name build.gradle.kts
+  - name: Extract Android project
+    run: |
+      mkdir extracted
+      ZIP_FILE=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
+      test -n "$ZIP_FILE" || { echo "ZIP file not found"; exit 1; }
+      unzip -o "$ZIP_FILE" -d extracted
+      PROJECT_DIR=$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit | xargs dirname)
+      test -n "$PROJECT_DIR" || { echo "Android project not found"; exit 1; }
+      echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+      echo "Project found at $PROJECT_DIR"
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+  - name: Setup Gradle
+    uses: gradle/actions/setup-gradle@v4
+    with:
+      gradle-version: '8.9'
 
-      - name: Build APK
-        run: |
-          gradle -p extracted/VelmoraEcomSolutions assembleDebug
+  - name: Build APK
+    run: |
+      cd "$PROJECT_DIR"
+      if [ -f gradlew ]; then
+        chmod +x gradlew
+        ./gradlew assembleDebug --stacktrace
+      else
+        gradle assembleDebug --stacktrace
+      fi
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Velmora-APK
-          path: extracted/VelmoraEcomSolutions/app/build/outputs/apk/debug/*.apk
+  - name: Upload APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: Velmora-APK
+      path: |
+        extracted/**/*.apk
+      if-no-files-found: error
